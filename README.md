@@ -11,7 +11,7 @@ Updates:
 
 Overhauled the entire lora system. Normal lora loader node works now, no need for specialized lora loaders.
 
-Converted QuaRot to ConvRot, which is a decent quality gain.
+Converted QuaRot to ConvRot, which is a small but free quality gain.
 
 Added Pre-Lora noded, which you can connect to the INT8 Model loader to merge loras before utilizing on the fly quantization. 
 
