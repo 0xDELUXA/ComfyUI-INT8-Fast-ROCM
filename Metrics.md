@@ -200,7 +200,7 @@ Qwen Image 2512
 | ΔCos/step ↑ | `-0.0023754 ±0.0015020` ★ | `-0.0055836 ±0.0019522` | `-0.0029254 ±0.0013186` | `-0.0024572 ±0.0010212` | `-0.0034970 ±0.0014186` | `-0.0057739 ±0.0019517` |
 > ★ = best value for that metric &nbsp;|&nbsp; ± = avg of per-timestep SE (std/√n\_seeds) `[--stratify-std]`
 
-#Anima on a 5060
+# Anima on a 5060
 
 16 samples per column.
 
