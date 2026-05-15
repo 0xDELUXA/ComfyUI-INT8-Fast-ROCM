@@ -91,10 +91,6 @@ class INT8ModelSave:
                     # with requires_grad=True by default, which is invalid for
                     # int8 tensors. Mark all int8 modules for direct save.
                     mark_module_for_direct_save(module)
-                
-                # Only log modules that are INT8-aware (have _is_quantized attribute)
-                if hasattr(module, '_is_quantized'):
-                    print(f"[INT8Save] int8 module: '{name}' | _is_quantized={module._is_quantized}")
 
                 if getattr(module, "_is_quantized", False):
                     # 1. Comfy Quant Hint
