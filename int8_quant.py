@@ -633,6 +633,82 @@ if _COMFY_OPS_AVAILABLE:
 # INT8 Model Patcher - Unified LoRA Handling
 # =============================================================================
 
+class INT8LowVramPatch:
+    is_lowvram_patch = True
+
+    def __init__(self, key, patches, module, lora_mode):
+        self.key = key
+        self.patches = patches
+        self.module = module
+        self.lora_mode = lora_mode
+        self.prepared_patches = None
+
+    @staticmethod
+    def _prefetch_prepared_value(value, counter, destination, stream=None, copy=True):
+        try:
+            return comfy.lora.prefetch_prepared_value(value, counter, destination, stream, copy)
+        except TypeError as original_error:
+            try:
+                return comfy.lora.prefetch_prepared_value(value, counter, destination)
+            except TypeError:
+                raise original_error
+
+    def memory_required(self):
+        counter = [0]
+        for patch in self.patches[self.key]:
+            self._prefetch_prepared_value(patch[1], counter, None, None, False)
+        return counter[0]
+
+    def prepare(self, destination, stream, copy=True, commit=True):
+        counter = [0]
+        prepared_patches = [
+            (patch[0], self._prefetch_prepared_value(patch[1], counter, destination, stream, copy), patch[2], patch[3], patch[4])
+            for patch in self.patches[self.key]
+        ]
+        if commit:
+            self.prepared_patches = prepared_patches
+        return prepared_patches
+
+    def clear_prepared(self):
+        self.prepared_patches = None
+
+    def __call__(self, weight):
+        patches = self.prepared_patches if self.prepared_patches is not None else self.patches[self.key]
+        scale = self.module._get_weight_scale()
+        if isinstance(scale, torch.Tensor):
+            scale = scale.to(weight.device)
+
+        weight_float = dequantize(weight, scale)
+
+        use_convrot = getattr(self.module, "_use_convrot", False)
+        if use_convrot:
+            group_size = getattr(self.module, "_convrot_groupsize", CONVROT_GROUP_SIZE)
+            try:
+                from .convrot import build_hadamard, rotate_weight
+                H = build_hadamard(group_size, device=weight.device, dtype=weight_float.dtype)
+                weight_float = rotate_weight(weight_float, H, group_size=group_size)
+            except ImportError:
+                use_convrot = False
+
+        patched_weight_float = comfy.lora.calculate_weight(
+            patches,
+            weight_float,
+            self.key,
+            intermediate_dtype=weight_float.dtype,
+        )
+
+        if use_convrot:
+            patched_weight_float = rotate_weight(patched_weight_float, H, group_size=group_size)
+
+        if self.lora_mode == "Stochastic":
+            return stochastic_round_int8_delta(
+                patched_weight_float,
+                scale,
+                seed=comfy.utils.string_to_seed(self.key),
+            )
+        return quantize_int8(patched_weight_float, scale)
+
+
 class INT8ModelPatcher(comfy.model_patcher.ModelPatcher):
     """
     Custom ModelPatcher that intercepts patching for INT8 layers.
@@ -795,6 +871,21 @@ class INT8ModelPatcher(comfy.model_patcher.ModelPatcher):
     def load(self, *args, **kwargs):
         self.finalize_pending_int8()
 
+        if not Int8TensorwiseOps.dynamic_lora:
+            for k in list(self.backup):
+                if k in self.patches:
+                    try:
+                        module = comfy.utils.get_attr(self.model, k.rsplit('.', 1)[0])
+                    except AttributeError:
+                        module = None
+                    if hasattr(module, "_is_quantized") and module._is_quantized:
+                        bk = self.backup.pop(k)
+                        if bk.inplace_update:
+                            dest = comfy.utils.get_attr(self.model, k)
+                            dest.data.copy_(bk.weight)
+                        else:
+                            comfy.utils.set_attr(self.model, k, bk.weight)
+
         # Cleanup: Revert any keys that are in backup but no longer in patches (stale patches)
         # This ensures that when a LoRA is disabled, the model returns to its base state.
         stale_keys = [k for k in self.backup if k not in self.patches]
@@ -824,11 +915,19 @@ class INT8ModelPatcher(comfy.model_patcher.ModelPatcher):
                 bias_key = name + ".bias"
                 
                 if weight_key in self.patches:
-                    if hasattr(module, "weight_lowvram_function"):
-                        module.weight_lowvram_function = None
-                    if hasattr(module, "weight_function"):
-                        module.weight_function = [f for f in getattr(module, "weight_function", []) if type(f).__name__ != "LowVramPatch"]
-                    self.patch_weight_to_device(weight_key, device_to=device_to)
+                    if Int8TensorwiseOps.dynamic_lora:
+                        if hasattr(module, "weight_lowvram_function"):
+                            module.weight_lowvram_function = None
+                        if hasattr(module, "weight_function"):
+                            module.weight_function = [f for f in getattr(module, "weight_function", []) if type(f).__name__ != "LowVramPatch"]
+                        self.patch_weight_to_device(weight_key, device_to=device_to)
+                    else:
+                        module.weight_lowvram_function = INT8LowVramPatch(
+                            weight_key,
+                            self.patches,
+                            module,
+                            getattr(Int8TensorwiseOps, "lora_mode", "None"),
+                        )
                     
                 if bias_key in self.patches:
                     if hasattr(module, "bias_lowvram_function"):
