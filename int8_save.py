@@ -9,6 +9,14 @@ import torch
 from comfy.cli_args import args
 
 
+def _is_dynamic_lora_enabled():
+    try:
+        from .int8_quant import Int8TensorwiseOps
+        return bool(getattr(Int8TensorwiseOps, "dynamic_lora", False))
+    except Exception:
+        return False
+
+
 def _resolve_source_metadata(model):
     """Walk the patcher clone chain and the inner model object to recover the
     original safetensors metadata that was stashed by UNetLoaderINTW8A8.
@@ -109,6 +117,49 @@ class INT8ModelSave:
             if hasattr(model_patcher, "model") and hasattr(model_patcher.model, "named_modules"):
                 yield from model_patcher.model.named_modules()
 
+        def materialize_int8_lora_patches(model_patcher):
+            """Bake active non-dynamic INT8 LoRA low-VRAM functions into weights.
+
+            The newer ComfyUI low-VRAM integration stores non-dynamic INT8 LoRA
+            patches as module.weight_lowvram_function instead of immediately
+            mutating the int8 parameter. That is correct for sampling memory,
+            but this save node marks int8 modules as directly savable, which
+            intentionally bypasses LazyCastingParam. Without this pre-pass the
+            checkpoint would serialize the base int8 weight and drop the LoRA.
+            """
+            if _is_dynamic_lora_enabled() or not hasattr(model_patcher, "patch_weight_to_device"):
+                return
+
+            patches = getattr(model_patcher, "patches", None)
+            if not patches:
+                return
+
+            load_device = getattr(model_patcher, "load_device", None)
+            materialized = 0
+            for name, module in iter_model_modules(model_patcher):
+                if not getattr(module, "_is_quantized", False):
+                    continue
+
+                weight_key = name + ".weight" if name else "weight"
+                if weight_key not in patches:
+                    continue
+
+                try:
+                    current_weight = getattr(module, "weight", None)
+                    device_to = load_device if load_device is not None else getattr(current_weight, "device", None)
+                    model_patcher.patch_weight_to_device(weight_key, device_to=device_to)
+                    if hasattr(module, "weight_lowvram_function"):
+                        module.weight_lowvram_function = None
+                    materialized += 1
+                except Exception as e:
+                    logging.warning(
+                        f"INT8 Save: failed to materialize LoRA patch for {weight_key}: {e}. "
+                        "The saved checkpoint may miss this LoRA patch."
+                    )
+
+            if materialized > 0:
+                logging.info(f"INT8 Save: materialized {materialized} INT8 LoRA patched weight(s) before saving.")
+
         # Finalize any deferred INT8 layers (Aimdo/Windows deferred-load path sets
         # _pending_int8_finalize instead of quantizing immediately). Without this,
         # those modules still have _is_quantized=False at save time and no
@@ -152,6 +203,8 @@ class INT8ModelSave:
         # were materialized only during the load pass.
         if finalize_fn is not None:
             finalize_fn()
+
+        materialize_int8_lora_patches(model)
 
         # Collect comfy_quant and (scalar) weight_scale extra_keys based on
         # the post-patch module state.
@@ -215,13 +268,24 @@ class INT8ModelSave:
             requires_grad = tensor.is_floating_point() or tensor.is_complex()
             return torch.nn.Parameter.__new__(cls, tensor, requires_grad=requires_grad)
 
+        had_save_flag = hasattr(model, "_int8_save_materialized_lora")
+        old_save_flag = getattr(model, "_int8_save_materialized_lora", False)
+
         try:
+            model._int8_save_materialized_lora = True
             comfy.model_patcher.LazyCastingParam.__new__ = staticmethod(lazy_casting_param_new)
             comfy.model_patcher.LazyCastingParamPiece.__new__ = staticmethod(lazy_casting_param_piece_new)
             comfy.sd.save_checkpoint(output_checkpoint, model, metadata=metadata, extra_keys=extra_keys)
         finally:
             comfy.model_patcher.LazyCastingParam.__new__ = original_lazy_new
             comfy.model_patcher.LazyCastingParamPiece.__new__ = original_lazy_piece_new
+            if had_save_flag:
+                model._int8_save_materialized_lora = old_save_flag
+            else:
+                try:
+                    delattr(model, "_int8_save_materialized_lora")
+                except AttributeError:
+                    pass
             # Restore module states so we don't break dynamic VRAM management
             for module, had_flag, old_flag in patched_modules:
                 if had_flag:

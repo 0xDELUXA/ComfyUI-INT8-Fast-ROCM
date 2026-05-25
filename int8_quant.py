@@ -938,7 +938,9 @@ class INT8ModelPatcher(comfy.model_patcher.ModelPatcher):
     def load(self, *args, **kwargs):
         self.finalize_pending_int8()
 
-        if not Int8TensorwiseOps.dynamic_lora:
+        save_materialized = bool(getattr(self, "_int8_save_materialized_lora", False))
+
+        if not Int8TensorwiseOps.dynamic_lora and not save_materialized:
             for k in list(self.backup):
                 if k in self.patches:
                     try:
@@ -981,7 +983,12 @@ class INT8ModelPatcher(comfy.model_patcher.ModelPatcher):
                 weight_key = name + ".weight"
                 
                 if weight_key in self.patches:
-                    if Int8TensorwiseOps.dynamic_lora:
+                    if save_materialized:
+                        if hasattr(module, "weight_lowvram_function"):
+                            module.weight_lowvram_function = None
+                        if hasattr(module, "weight_function"):
+                            module.weight_function = [f for f in getattr(module, "weight_function", []) if type(f).__name__ != "LowVramPatch"]
+                    elif Int8TensorwiseOps.dynamic_lora:
                         if hasattr(module, "weight_lowvram_function"):
                             module.weight_lowvram_function = None
                         if hasattr(module, "weight_function"):
