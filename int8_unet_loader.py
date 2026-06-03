@@ -113,7 +113,7 @@ class UNetLoaderINTW8A8:
             ]
         elif model_type == "ideogram4":
             Int8TensorwiseOps.excluded_names = [
-                'embed_image_indicator', 't_embedding',
+                'embed_image_indicator', 't_embedding', 'proj',
             ]
         elif model_type == "wan":
             Int8TensorwiseOps.excluded_names = [
