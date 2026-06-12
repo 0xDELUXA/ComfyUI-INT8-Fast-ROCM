@@ -1,7 +1,6 @@
 import torch
 import triton
 import triton.language as tl
-from triton.language.extra import libdevice
 
 # =============================================================================
 # Kernel 1: Fused Row-wise Quantization (FP16/BF16 -> INT8 + Scale)
@@ -44,9 +43,9 @@ def _quantize_rowwise_kernel(
     q_f = x / scale
     
     # Round and Clamp
-    # FIX: Use floor(x + 0.5) for rounding. This is portable across Triton versions.
-    q_i = libdevice.rint(q_f).to(tl.int32)
+    q_i = tl.floor(q_f + 0.5)
     q_i = tl.clamp(q_i, -128.0, 127.0)
+    q_i = q_i.to(tl.int32)
     
     # 4. Store
     tl.store(y_row_ptr + offsets, q_i.to(tl.int8), mask=mask)
