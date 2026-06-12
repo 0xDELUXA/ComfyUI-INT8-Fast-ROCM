@@ -1035,6 +1035,9 @@ class INT8ModelPatcher(comfy.model_patcher.ModelPatcher):
                             module.weight_function = [f for f in getattr(module, "weight_function", []) if type(f).__name__ != "LowVramPatch"]
                         self.patch_weight_to_device(weight_key, device_to=device_to)
                     else:
+                        if hasattr(module, "weight_function"):
+                            module.weight_function = [f for f in getattr(module, "weight_function", []) if type(f).__name__ != "LowVramPatch"]
+                            
                         lowvram_patch = INT8LowVramPatch(
                             weight_key,
                             self.patches,
