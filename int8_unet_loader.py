@@ -138,7 +138,7 @@ class UNetLoaderINTW8A8:
         elif model_type == "wan":
             Int8TensorwiseOps.excluded_names = [
                 'patch_embedding', 'text_embedding', 'time_embedding', 'time_projection', 'head',
-                'img_emb',
+                'img_emb', 'face_adapter', 'face_encoder', 'motion_encoder', 'pose_patch_embedding',
             ]
         elif model_type == "ltx2":
             Int8TensorwiseOps.excluded_names = [
