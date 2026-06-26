@@ -2,12 +2,10 @@
 """
 Convert .comfy_quant layers in a safetensors file from the old format:
   {"convrot": true, "convrot_groupsize": 256, "per_row": true}
-to the new format:
-  {"format": "int8_perrow", "convrot": true, "convrot_groupsize": 256}
-  {"format": "int8_tensorwise", ...}  (when per_row is false/absent)
-
-The format field is derived from the "per_row" key (removed afterward).
-All other tensors are copied unchanged.
+to the native comfy format:
+  {"format": "int8_tensorwise", "convrot": true, "convrot_groupsize": 256}
+  
+All other tensors and metadata are copied unchanged.
 
 Usage: python convert_comfy_quant.py <input.safetensors> <output.safetensors>
 """
