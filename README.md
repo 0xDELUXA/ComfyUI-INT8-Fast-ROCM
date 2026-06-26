@@ -3,6 +3,14 @@ https://github.com/Comfy-Org/ComfyUI/commit/1a510f04234e5a213d3985a1a54f65652623
 
 No, I did not help at all with this and had no involvement. My **existing quants are likely to not work** due to a quant naming missmatch, but [silveroxides](https://huggingface.co/silveroxides) are likely to work as they were quite involved in the process of making this happen.
 
+Existing INT8 fast quants can be converted to the proper format via this script https://github.com/BobJohnson24/ComfyUI-INT8-Fast/blob/main/convert_to_comfy.py
+
+```
+python convert_comfy_quant.py I8Fast.safetensors I8Comfy.safetensors
+or
+python convert_comfy_quant.py I8Fast.safetensors --inplace
+```
+
 I am glad to retire with a Piña colada in my hands, on the beach. Might slim this node down to an exclusively pre-lora focused node in the future, if that does not become a default comfy feature.
 
 # Comfy INT8 Acceleration
