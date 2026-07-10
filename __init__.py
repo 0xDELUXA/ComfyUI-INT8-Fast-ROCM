@@ -86,6 +86,7 @@ try:
     from .int8_lora import INT8GroupedLora
     from .int8_save import INT8ModelSave
     from .int8_clip_loader import CLIPLoaderINT8, DualCLIPLoaderINT8
+    from .int8_clip_save import INT8CLIPSave
     
     NODE_CLASS_MAPPINGS = {
         "OTUNetLoaderW8A8": UNetLoaderINTW8A8,
@@ -94,6 +95,7 @@ try:
         "INT8PreLoraLoader": PreLoraLoader,
         "CLIPLoaderINT8": CLIPLoaderINT8,
         "DualCLIPLoaderINT8": DualCLIPLoaderINT8,
+        "INT8CLIPSave": INT8CLIPSave,
     }
 
     NODE_DISPLAY_NAME_MAPPINGS = {
@@ -103,6 +105,7 @@ try:
         "INT8PreLoraLoader": "INT8 Pre-Lora Loader",
         "CLIPLoaderINT8": "Load CLIP INT8 (W8A8)",
         "DualCLIPLoaderINT8": "Load Dual CLIP INT8 (W8A8)",
+        "INT8CLIPSave": "Save Int8 CLIP",
     }
 except ImportError as e:
     logging.error(f"Int88: Failed to import nodes: {e}")
