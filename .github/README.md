@@ -3,7 +3,10 @@ The official support is problematic with AMD gpu's atm. It uses either "eager" o
 
 Long story short, at least for AMD this is still relevant until they fix the performance in the comfyui-kitchen for us. (doubt)
 
-* the int4 branch has int4 model loading available every model I've tried works, except there is no lora support atm.
+((( This node requires triton package on linux or triton-windows (pip install triton-windows) on windows 10-11. )))
+
+* int4 model loading support. Works with comfyui's example krea2 model, models made with [Starnodes-ModelConverter](https://github.com/Starnodes2024/comfyui-starnodes-modelconverter) and a few other's I came across. Partial lora support. On ltxvideo same error as int8 persist, couldn't solve for now.(no lora support there) On other int4 models USE 2X OR MORE LORA STRENGTH you would use normally with int8 or other models.
+
 * int8 clip saving now available
 
 <img width="550" height="166" alt="image" src="https://github.com/user-attachments/assets/c6bf6dd4-e8f2-4a86-8b33-8900d1e2a781" />
